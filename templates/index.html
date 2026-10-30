@@ -1,0 +1,671 @@
+{% raw %}<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParseViz — Interactive Parsing Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <style>
+        [data-bs-theme="dark"] {
+            --bg-main: #0f172a; --panel-bg: #1e293b; --panel-border: #334155;
+            --text-main: #f8fafc; --text-sub: #94a3b8; --code-bg: #0f172a; --tree-bg: #090d16;
+            --tree-node-stroke: #06b6d4; --tree-link: #475569; --rule-bg: #1e293b;
+            --ok-bg: rgba(16,185,129,.18); --ok-fg: #6ee7b7;
+            --bad-bg: rgba(244,63,94,.20); --bad-fg: #fda4af;
+            --warn-bg: rgba(245,158,11,.18); --warn-fg: #fcd34d;
+            --cell-fill: rgba(59,130,246,.16); --cell-fill-fg: #93c5fd;
+            --term-fill: #164e63; --match-fill: #065f46;
+        }
+        [data-bs-theme="light"] {
+            --bg-main: #f8fafc; --panel-bg: #ffffff; --panel-border: #e2e8f0;
+            --text-main: #0f172a; --text-sub: #64748b; --code-bg: #f1f5f9; --tree-bg: #f8fafc;
+            --tree-node-stroke: #2563eb; --tree-link: #94a3b8; --rule-bg: #ffffff;
+            --ok-bg: #d1fae5; --ok-fg: #065f46;
+            --bad-bg: #ffe4e6; --bad-fg: #9f1239;
+            --warn-bg: #fef3c7; --warn-fg: #92400e;
+            --cell-fill: #dbeafe; --cell-fill-fg: #1e40af;
+            --term-fill: #cffafe; --match-fill: #a7f3d0;
+        }
+        body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; min-height: 100vh; transition: background-color .3s, color .3s; }
+        .text-sub { color: var(--text-sub) !important; }
+        code { color: inherit; font-family: 'JetBrains Mono', monospace; font-size: .85em; }
+        .studio-header { border-bottom: 1px solid var(--panel-border); background: var(--panel-bg); }
+        .glass-card { background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,.05); margin-bottom: 20px; }
+        .form-control, .form-select { background-color: var(--code-bg); border: 1px solid var(--panel-border); color: var(--text-main); font-family: 'JetBrains Mono', monospace; border-radius: 8px; }
+        .form-control:focus, .form-select:focus { background-color: var(--code-bg); color: var(--text-main); }
+        .nav-tabs { border-bottom: 1px solid var(--panel-border); flex-wrap: nowrap; overflow-x: auto; }
+        .nav-tabs .nav-link { color: var(--text-sub); font-weight: 600; border: none; border-bottom: 2px solid transparent; padding: 10px 16px; white-space: nowrap; }
+        .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: transparent; }
+        .btn-theme-toggle { border: 1px solid var(--panel-border); background: var(--panel-bg); color: var(--text-main); border-radius: 20px; padding: 6px 14px; font-weight: 600; cursor: pointer; }
+        .table { --bs-table-bg: transparent; --bs-table-color: var(--text-main); --bs-table-border-color: var(--panel-border); --bs-table-striped-bg: rgba(148,163,184,.07); --bs-table-striped-color: var(--text-main); }
+        .rule-card { background: var(--rule-bg); border: 1px solid var(--panel-border); border-left: 4px solid #0d6efd; border-radius: 8px; padding: 15px 18px; margin-bottom: 20px; }
+        .step-box { background: var(--code-bg); border-left: 4px solid #10b981; padding: 10px 15px; border-radius: 6px; margin-bottom: 10px; border: 1px solid var(--panel-border); }
+        .rule-formula { font-family: 'JetBrains Mono', monospace; background: rgba(13,110,253,.1); padding: 2px 6px; border-radius: 4px; color: #3b82f6; font-weight: 600; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: .78rem; font-weight: 700; margin: 2px 4px 2px 0; font-family: 'JetBrains Mono', monospace; }
+        .pill-ok { background: var(--ok-bg); color: var(--ok-fg); }
+        .pill-bad { background: var(--bad-bg); color: var(--bad-fg); }
+        .pill-warn { background: var(--warn-bg); color: var(--warn-fg); }
+        .pill-info { background: var(--cell-fill); color: var(--cell-fill-fg); }
+        .sym { display: inline-block; padding: 1px 8px; margin: 2px; border-radius: 5px; background: var(--cell-fill); color: var(--cell-fill-fg); font-family: 'JetBrains Mono', monospace; font-size: .85rem; font-weight: 600; cursor: help; }
+        .sym.fol { background: rgba(139,92,246,.18); color: #a78bfa; }
+        .grammar-box { background: var(--code-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 14px; font-family: 'JetBrains Mono', monospace; font-size: .85rem; white-space: pre-wrap; }
+        .arrow { color: var(--text-sub); }
+        .sample-chip { cursor: pointer; border: 1px solid var(--panel-border); background: var(--code-bg); color: var(--text-main); border-radius: 16px; padding: 3px 11px; font-family: 'JetBrains Mono', monospace; font-size: .78rem; margin: 0 6px 6px 0; }
+        .sample-chip:hover { border-color: #3b82f6; }
+        .sample-chip.valid { border-left: 4px solid #10b981; }
+        .sample-chip.invalid { border-left: 4px solid #f43f5e; }
+        .sample-chip.epsilon { border-left: 4px solid #f59e0b; }
+
+        /* LL(1) table */
+        #ll1-table td.cell-fill { background: var(--cell-fill); color: var(--cell-fill-fg); font-family: 'JetBrains Mono', monospace; font-size: .8rem; }
+        #ll1-table td.cell-conflict { background: var(--bad-bg) !important; color: var(--bad-fg); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: .8rem; outline: 2px solid #f43f5e; outline-offset: -2px; }
+        #ll1-table td.cell-empty { color: var(--text-sub); background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(244,63,94,.06) 6px 12px); font-size: .72rem; }
+        #ll1-table td.active-cell { box-shadow: inset 0 0 0 3px #f59e0b; }
+        #ll1-table th { white-space: nowrap; }
+
+        /* trace */
+        .tok { display: inline-block; padding: 3px 10px; margin: 2px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: .85rem; background: var(--code-bg); border: 1px solid var(--panel-border); }
+        .tok.consumed { background: var(--ok-bg); color: var(--ok-fg); border-color: transparent; }
+        .tok.err { background: var(--bad-bg); color: var(--bad-fg); border-color: #f43f5e; font-weight: 700; }
+        .tok-wrap { display: inline-block; text-align: center; }
+        .tok-caret { color: #f43f5e; font-size: .7rem; font-weight: 800; line-height: 1; }
+        #trace-table tbody tr { cursor: pointer; }
+        #trace-table tbody tr.cur > * { background: rgba(245,158,11,.22) !important; }
+        #trace-table tbody tr.err-row > * { color: var(--bad-fg) !important; font-weight: 700; }
+
+        /* tree */
+        #tree-container { width: 100%; height: 540px; background: var(--tree-bg); border: 1px solid var(--panel-border); border-radius: 12px; position: relative; overflow: hidden; }
+        .link { fill: none; stroke: var(--tree-link); stroke-width: 2px; }
+        .node circle { fill: var(--panel-bg); stroke: var(--tree-node-stroke); stroke-width: 2.5px; transition: fill .3s, stroke .3s; }
+        .node.t circle { fill: var(--term-fill); stroke: #22d3ee; }
+        .node.t.matched circle { fill: var(--match-fill); stroke: #10b981; }
+        .node.eps circle { stroke-dasharray: 3 3; stroke: #f59e0b; }
+        .node.pending circle { stroke-dasharray: 4 3; opacity: .6; }
+        .node.fresh circle { stroke: #f59e0b; stroke-width: 4px; }
+        .node.errnode circle { fill: var(--bad-bg); stroke: #f43f5e; stroke-width: 4px; }
+        .node text { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; fill: var(--text-main); pointer-events: none; }
+        .node .errlabel { fill: #f43f5e; font-size: 11px; }
+
+        /* practice */
+        .q-string { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 600; background: var(--code-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 16px 20px; text-align: center; word-break: break-word; }
+
+        /* ---- Layout: left panel static, right panel scrolls (desktop) ---- */
+        .studio-header { position: sticky; top: 0; z-index: 1030; }
+        @media (min-width: 992px) {
+            :root { --header-h: 72px; }
+            .left-static { position: sticky; top: calc(var(--header-h) + 8px); align-self: flex-start;
+                           max-height: calc(100vh - var(--header-h) - 24px); overflow-y: auto; }
+            .left-static .glass-card { margin-bottom: 0; }
+            /* tab bar stays visible while the results scroll */
+            #studioTabs { position: sticky; top: var(--header-h); z-index: 20; background: var(--panel-bg); padding-top: 8px; margin-top: -8px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="studio-header py-3 mb-4">
+    <div class="container-fluid px-4 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <h3 class="m-0 fw-bold text-primary"><i class="bi bi-diagram-3-fill me-2"></i>ParseViz</h3>
+            <span class="badge bg-primary">LL(1) Studio</span>
+        </div>
+        <button class="btn-theme-toggle" onclick="toggleTheme()">
+            <i class="bi bi-sun-fill text-warning me-1" id="theme-icon"></i> <span id="theme-text">Light Theme</span>
+        </button>
+    </div>
+</header>
+
+<div class="container-fluid px-4">
+    <div class="row">
+        <!-- Left Column: Inputs -->
+        <div class="col-lg-4 left-static">
+            <div class="glass-card p-4">
+                <h5 class="fw-bold mb-3"><i class="bi bi-sliders me-2 text-primary"></i>Grammar Setup</h5>
+                <div class="mb-3">
+                    <label class="form-label small text-sub fw-semibold">EXAMPLE GRAMMARS</label>
+                    <select id="preset" class="form-select form-select-sm" onchange="loadPreset()">
+                        <option value="">— choose an example —</option>
+                        <option value="expr">Expression (left recursion)</option>
+                        <option value="eps">Balanced parentheses (ε-production)</option>
+                        <option value="factor">Common prefixes (left factoring)</option>
+                        <option value="ifelse">If-else (FIRST/FOLLOW conflict)</option>
+                        <option value="multi">Two conflicts (FIRST/FIRST)</option>
+                        <option value="indirect">Indirect left recursion</option>
+                        <option value="ambig">Ambiguous expression grammar</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-sub fw-semibold">CONTEXT-FREE GRAMMAR (CFG)</label>
+                    <textarea id="grammar" class="form-control" rows="8" spellcheck="false">E -> E + T | T
+T -> T * F | F
+F -> ( E ) | id</textarea>
+                    <div class="form-text small">Separate symbols with spaces. Epsilon: <code>ε</code>, <code>e</code>, <code>eps</code> or an empty alternative.</div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small text-sub fw-semibold">TEST STRING</label>
+                    <input type="text" id="test_string" class="form-control" value="id + id * id" onkeydown="if(event.key==='Enter')processGrammar()">
+                    <div class="form-text small">Leave empty (or press ε) to test the empty string.</div>
+                </div>
+                <div class="mb-3" id="sample-chips"></div>
+                <button onclick="processGrammar()" class="btn btn-primary w-100 fw-bold py-2">
+                    <i class="bi bi-play-fill me-1"></i> Analyze &amp; Run
+                </button>
+                <div id="global-error" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Right Column: Tabs -->
+        <div class="col-lg-8">
+            <div class="glass-card p-3 mb-3" id="summary-strip"></div>
+            <div class="glass-card p-4">
+                <ul class="nav nav-tabs mb-4" id="studioTabs" role="tablist">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-transform">1. Transformations</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-ff">2. FIRST / FOLLOW</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-table">3. LL(1) Table</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-trace" id="trace-tab-btn">4. Parsing Trace</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-tree" id="tree-tab-btn">5. Parse Tree</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-practice"><i class="bi bi-mortarboard-fill me-1"></i>6. Practice</button></li>
+                </ul>
+
+                <div class="tab-content">
+
+                    <!-- 1. TRANSFORMATIONS -->
+                    <div class="tab-pane fade show active" id="tab-transform">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6"><div class="small fw-bold text-sub mb-1">ORIGINAL GRAMMAR</div><div id="orig-grammar" class="grammar-box"></div></div>
+                            <div class="col-md-6"><div class="small fw-bold text-sub mb-1">AFTER LEFT-RECURSION REMOVAL + LEFT FACTORING</div><div id="final-grammar" class="grammar-box"></div></div>
+                        </div>
+
+                        <div class="rule-card mb-3">
+                            <h6 class="fw-bold text-primary mb-2"><i class="bi bi-journal-text me-2"></i>Elimination of Left Recursion Rules</h6>
+                            <p class="small mb-2">Convert immediate left recursion of the form:</p>
+                            <div class="mb-2"><span class="rule-formula">A -> A&alpha; | &beta;</span></div>
+                            <p class="small mb-1">Into the non-recursive form:</p>
+                            <div><span class="rule-formula">A -> &beta;A'</span> &nbsp;&nbsp; and &nbsp;&nbsp; <span class="rule-formula">A' -> &alpha;A' | &epsilon;</span></div>
+                            <p class="small text-sub mt-2 mb-0">Indirect recursion (A &rArr; B&hellip; &rArr; A&hellip;) is removed first by substituting earlier non-terminals (Paull's algorithm).</p>
+                        </div>
+                        <h6 class="fw-bold text-primary mb-3">Left Recursion Derivation</h6>
+                        <div id="lr-output" class="mb-4"></div>
+
+                        <div class="rule-card mb-3" style="border-left-color:#06b6d4;">
+                            <h6 class="fw-bold text-info mb-2"><i class="bi bi-journal-text me-2"></i>Elimination of Left Factoring Rules</h6>
+                            <p class="small mb-2">If two or more productions of a non-terminal have the same prefix:</p>
+                            <div class="mb-2"><span class="rule-formula">A -> &alpha;&beta;<sub>1</sub> | &alpha;&beta;<sub>2</sub> | &hellip; | &gamma;</span></div>
+                            <p class="small mb-1">Left-factor it into:</p>
+                            <div><span class="rule-formula">A -> &alpha;A' | &gamma;</span> &nbsp;&nbsp; and &nbsp;&nbsp; <span class="rule-formula">A' -> &beta;<sub>1</sub> | &beta;<sub>2</sub> | &hellip;</span></div>
+                        </div>
+                        <h6 class="fw-bold text-info mb-3">Left Factoring Derivation</h6>
+                        <div id="lf-output"></div>
+                    </div>
+
+                    <!-- 2. FIRST / FOLLOW -->
+                    <div class="tab-pane fade" id="tab-ff">
+                        <div class="rule-card">
+                            <h6 class="fw-bold text-primary mb-2"><i class="bi bi-journal-text me-2"></i>Rules for FIRST(X)</h6>
+                            <ul class="small mb-0 ps-3">
+                                <li class="mb-1"><b>Rule 1:</b> If <span class="rule-formula">X -> a&alpha;</span> and <code>a</code> is a terminal, add <code>a</code> to FIRST(X).</li>
+                                <li class="mb-1"><b>Rule 2:</b> If <span class="rule-formula">X -> &epsilon;</span>, add &epsilon; to FIRST(X).</li>
+                                <li class="mb-1"><b>Rule 3:</b> If <span class="rule-formula">X -> Y<sub>1</sub>Y<sub>2</sub>&hellip;Y<sub>k</sub></span>, add FIRST(Y<sub>1</sub>) &minus; {&epsilon;}; if Y<sub>1</sub> derives &epsilon;, continue with Y<sub>2</sub>, and so on. If all Y<sub>i</sub> derive &epsilon;, add &epsilon;.</li>
+                            </ul>
+                        </div>
+                        <h6 class="fw-bold text-success mb-3"><i class="bi bi-gear-fill me-2"></i>Step-by-Step Solving: FIRST (productions that add each symbol)</h6>
+                        <div id="first-steps-output" class="mb-4"></div>
+                        <hr class="my-4">
+                        <div class="rule-card" style="border-left-color:#8b5cf6;">
+                            <h6 class="fw-bold mb-2" style="color:#8b5cf6;"><i class="bi bi-journal-text me-2"></i>Rules for FOLLOW(X)</h6>
+                            <ul class="small mb-0 ps-3">
+                                <li class="mb-1"><b>Rule 1:</b> Add <code>$</code> to FOLLOW(start symbol).</li>
+                                <li class="mb-1"><b>Rule 2:</b> For <span class="rule-formula">A -> &alpha; B &beta;</span>, add FIRST(&beta;) &minus; {&epsilon;} to FOLLOW(B).</li>
+                                <li class="mb-1"><b>Rule 3:</b> For <span class="rule-formula">A -> &alpha; B</span>, or <span class="rule-formula">A -> &alpha; B &beta;</span> with &epsilon; &isin; FIRST(&beta;), add FOLLOW(A) to FOLLOW(B).</li>
+                            </ul>
+                        </div>
+                        <h6 class="fw-bold mb-3" style="color:#8b5cf6;"><i class="bi bi-gear-fill me-2"></i>Step-by-Step Solving: FOLLOW</h6>
+                        <div id="follow-steps-output" class="mb-4"></div>
+                        <hr class="my-4">
+                        <h6 class="fw-bold text-primary mb-1"><i class="bi bi-table me-2"></i>Final FIRST &amp; FOLLOW Sets</h6>
+                        <p class="small text-sub">Hover over a symbol to see which production put it there.</p>
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle">
+                                <thead><tr><th>Non-Terminal</th><th>FIRST Set</th><th>FOLLOW Set</th></tr></thead>
+                                <tbody id="ff-tbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="contrib-output"></div>
+                    </div>
+
+                    <!-- 3. LL(1) TABLE -->
+                    <div class="tab-pane fade" id="tab-table">
+                        <h6 class="fw-bold text-primary mb-3">LL(1) Parsing Table</h6>
+                        <div id="conflict-alert" class="mb-3"></div>
+                        <div class="small mb-2">
+                            <span class="pill pill-info">production</span>
+                            <span class="pill pill-bad">conflict (several productions)</span>
+                            <span class="pill" style="background:repeating-linear-gradient(45deg,transparent 0 4px,rgba(244,63,94,.18) 4px 8px);">- = empty entry (syntax error)</span>
+                            <span class="pill" style="box-shadow:inset 0 0 0 2px #f59e0b;">cell used in selected trace step</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered text-center align-middle" id="ll1-table"></table>
+                        </div>
+                    </div>
+
+                    <!-- 4. PARSING TRACE -->
+                    <div class="tab-pane fade" id="tab-trace">
+                        <h6 class="fw-bold text-primary mb-3">Parsing Trace</h6>
+                        <div id="parse-status" class="mb-3"></div>
+                        <div id="token-strip" class="mb-3"></div>
+                        <div class="small text-sub mb-2">Stack grows to the right (top of stack is the right-most symbol). Click a row to jump the parse tree and table to that step.</div>
+                        <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+                            <table class="table table-striped align-middle" id="trace-table">
+                                <thead><tr><th>Step</th><th>Stack</th><th>Remaining Input</th><th>Action</th></tr></thead>
+                                <tbody id="trace-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 5. PARSE TREE -->
+                    <div class="tab-pane fade" id="tab-tree">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <h6 class="fw-bold m-0 text-primary">Parse Tree <span id="tree-state" class="small text-sub fw-normal"></span></h6>
+                            <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="stepBy(-1)" title="Previous step"><i class="bi bi-skip-backward-fill"></i></button>
+                                <button class="btn btn-sm btn-primary" id="play-btn" onclick="togglePlay()"><i class="bi bi-play-fill"></i> Animate</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="stepBy(1)" title="Next step"><i class="bi bi-skip-forward-fill"></i></button>
+                                <select id="speed" class="form-select form-select-sm" style="width:auto">
+                                    <option value="1000">Slow</option><option value="550" selected>Normal</option><option value="220">Fast</option>
+                                </select>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="fitTree(true)">Center</button>
+                            </div>
+                        </div>
+                        <input type="range" class="form-range mb-2" id="step-slider" min="0" max="0" value="0" oninput="setStep(+this.value, true, true)">
+                        <div class="small text-sub mb-2" id="step-caption"></div>
+                        <div id="tree-container"><svg id="tree-svg" width="100%" height="100%"></svg></div>
+                        <div class="small mt-2">
+                            <span class="pill pill-info">circle = non-terminal</span>
+                            <span class="pill pill-info">filled = terminal</span>
+                            <span class="pill pill-ok">green = matched input</span>
+                            <span class="pill pill-warn">dashed = ε or not yet reached</span>
+                            <span class="pill pill-bad">red = error location</span>
+                        </div>
+                    </div>
+
+                    <!-- 6. PRACTICE -->
+                    <div class="tab-pane fade" id="tab-practice">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                            <h6 class="fw-bold m-0 text-primary"><i class="bi bi-mortarboard-fill me-2"></i>Practice Mode: predict accept / reject</h6>
+                            <div class="d-flex gap-2 align-items-center">
+                                <select id="q-count" class="form-select form-select-sm" style="width:auto">
+                                    <option value="5">5 questions</option><option value="8" selected>8 questions</option><option value="12">12 questions</option>
+                                </select>
+                                <button class="btn btn-sm btn-primary fw-bold" onclick="newRound()"><i class="bi bi-shuffle me-1"></i>New round</button>
+                            </div>
+                        </div>
+                        <p class="small text-sub">New strings are generated from the grammar in the editor (valid sentences, corrupted sentences and the empty string). Decide whether the LL(1) parser accepts each one, then see the real parser verdict.</p>
+                        <div id="practice-area"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const PRESETS = {
+    expr:  { g: "E -> E + T | T\nT -> T * F | F\nF -> ( E ) | id", s: "id + id * id" },
+    eps:   { g: "S -> ( S ) S | ε", s: "( ) ( ( ) )" },
+    factor:{ g: "A -> a b c | a b d | a x | y", s: "a b d" },
+    ifelse:{ g: "S -> if E then S S'\nS -> a\nS' -> else S | ε\nE -> b", s: "if b then a else a" },
+    multi: { g: "S -> A | B\nA -> a | b\nB -> a | b", s: "a" },
+    indirect:{ g: "S -> A\nA -> S y | z", s: "z y y" },
+    ambig: { g: "E -> E + E | E * E | ( E ) | id", s: "id + id * id" }
+};
+
+let DATA = null, zoomBehavior = null, gRoot = null, rootH = null, nodeSel = null, linkSel = null;
+let STEP = 0, MAXSTEP = 0, timer = null;
+const P = { qs: [], i: 0, score: 0, streak: 0, best: 0, log: [], busy: false, done: false };
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const setStr = a => a.length ? a.map(esc).join(', ') : '∅';
+const ruleHtml = r => esc(r).replace('→', '<span class="arrow">→</span>');
+
+function toggleTheme() {
+    const html = document.documentElement, dark = html.getAttribute('data-bs-theme') === 'dark';
+    html.setAttribute('data-bs-theme', dark ? 'light' : 'dark');
+    document.getElementById('theme-icon').className = dark ? 'bi bi-moon-fill text-dark me-1' : 'bi bi-sun-fill text-warning me-1';
+    document.getElementById('theme-text').innerText = dark ? 'Dark Theme' : 'Light Theme';
+}
+
+function loadPreset() {
+    const k = document.getElementById('preset').value;
+    if (!k) return;
+    document.getElementById('grammar').value = PRESETS[k].g;
+    document.getElementById('test_string').value = PRESETS[k].s;
+    processGrammar();
+}
+
+function showError(msg) {
+    document.getElementById('global-error').innerHTML = msg ? `<div class="alert alert-danger py-2 px-3 small mb-0"><b>Problem:</b> ${esc(msg)}</div>` : '';
+}
+
+async function api(url, body) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const json = await res.json().catch(() => ({ error: 'Server returned an unreadable response.' }));
+    if (!res.ok) throw new Error(json.error || 'Request failed');
+    return json;
+}
+
+async function processGrammar() {
+    stopPlay();
+    try {
+        DATA = await api('/api/analyze', { grammar: document.getElementById('grammar').value, test_string: document.getElementById('test_string').value });
+    } catch (e) { showError(e.message); return; }
+    showError('');
+    renderSamples(); renderSummary(); renderTransformations(); renderFirstFollow(); renderTable(); renderTrace(); renderTree();
+}
+
+function useString(s) { document.getElementById('test_string').value = s; processGrammar(); }
+
+function renderSamples() {
+    const chips = DATA.samples.map(s => {
+        const label = s.text === '' ? 'ε (empty)' : s.text;
+        const icon = s.kind === 'valid' ? '✓' : s.kind === 'invalid' ? '✗' : 'ε';
+        return `<button type="button" class="sample-chip ${s.kind}" data-s="${esc(s.text)}" title="${s.verdict ? 'accepted' : 'rejected'} by the parser" onclick="useString(this.dataset.s)">${icon} ${esc(label)}</button>`;
+    });
+    document.getElementById('sample-chips').innerHTML = chips.length ? `<div class="small text-sub fw-semibold mb-1">QUICK TEST STRINGS</div>${chips.join('')}` : '';
+}
+
+function renderSummary() {
+    const d = DATA;
+    const lr = d.left_recursion_steps.filter(s => s.has_recursion).length;
+    const lf = d.left_factoring_steps.filter(s => s.status === 'Factored').length;
+    const parts = [
+        d.is_ll1 ? `<span class="pill pill-ok">LL(1) ✓</span>` : `<span class="pill pill-bad">Not LL(1): ${d.conflicts.length} conflict${d.conflicts.length > 1 ? 's' : ''}</span>`,
+        `<span class="pill ${lr ? 'pill-warn' : 'pill-info'}">left recursion fixed: ${lr}</span>`,
+        `<span class="pill ${lf ? 'pill-warn' : 'pill-info'}">left factoring steps: ${lf}</span>`,
+        d.ambiguity.ambiguous ? `<span class="pill pill-bad" title="${esc(d.ambiguity.note)}">ambiguous: "${esc(d.ambiguity.example)}"</span>` : `<span class="pill pill-info" title="${esc(d.ambiguity.note)}">no ambiguity found (bounded)</span>`,
+        d.parse_success ? `<span class="pill pill-ok">input accepted</span>` : `<span class="pill pill-bad">input rejected</span>`
+    ];
+    document.getElementById('summary-strip').innerHTML = parts.join('');
+}
+
+function grammarText(g) {
+    return Object.entries(g).map(([h, ps]) => `${esc(h)} <span class="arrow">→</span> ${ps.map(esc).join(' <span class="arrow">|</span> ')}`).join('\n');
+}
+
+function renderTransformations() {
+    document.getElementById('orig-grammar').innerHTML = grammarText(DATA.original_grammar);
+    document.getElementById('final-grammar').innerHTML = grammarText(DATA.final_grammar);
+
+    document.getElementById('lr-output').innerHTML = DATA.left_recursion_steps.map(s => {
+        const bad = s.has_recursion;
+        const warn = s.type.startsWith('Warning');
+        return `<div class="p-3 mb-2 rounded border">
+            <div class="fw-bold mb-1 ${warn ? 'text-danger' : bad ? 'text-warning' : 'text-sub'}">${esc(s.non_terminal)} <span class="pill ${warn ? 'pill-bad' : bad ? 'pill-warn' : 'pill-info'}">${esc(s.type)}</span></div>
+            <div class="small">Original: <code>${s.original.map(ruleHtml).join(' ; ')}</code></div>
+            ${bad ? `<ul class="small my-2 ps-3">${s.explain.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : `<div class="small text-sub">${s.explain.map(esc).join(' ')}</div>`}
+            ${bad ? `<div class="small text-success mt-1">Result: <code>${s.transformed.map(ruleHtml).join(' ; ')}</code></div>` : ''}
+        </div>`;
+    }).join('');
+
+    document.getElementById('lf-output').innerHTML = DATA.left_factoring_steps.map(s => {
+        const fac = s.status === 'Factored';
+        return `<div class="p-3 mb-2 rounded border">
+            <div class="fw-bold mb-1 ${fac ? 'text-info' : 'text-sub'}">${esc(s.non_terminal)} <span class="pill ${fac ? 'pill-warn' : 'pill-info'}">${esc(s.status)}</span>${fac ? ` <span class="small text-sub fw-normal">common prefix: <code>${esc(s.common_prefix)}</code></span>` : ''}</div>
+            ${fac ? `<div class="small">Before: <code>${s.before.map(ruleHtml).join(' ; ')}</code></div>
+            <ul class="small my-2 ps-3">${s.explain.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+            <div class="small text-success">After: <code>${s.after.map(ruleHtml).join(' ; ')}</code></div>` : `<div class="small text-sub">${s.explain.map(esc).join(' ')}</div>`}
+        </div>`;
+    }).join('');
+}
+
+function logTable(rows, kind) {
+    if (!rows.length) return '<div class="small text-sub">Nothing to compute.</div>';
+    const head = kind === 'first' ? '' : '<th>Rule</th>';
+    return `<div class="table-responsive"><table class="table table-sm table-bordered align-middle small">
+        <thead><tr><th>Pass</th><th>Set</th>${head}<th>Adds</th><th>Because</th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td>${r.pass || '–'}</td>
+            <td class="mono fw-bold">${kind === 'first' ? 'FIRST' : 'FOLLOW'}(${esc(r.non_terminal)})</td>
+            ${kind === 'first' ? '' : `<td><span class="pill pill-info">R${r.rule}</span></td>`}
+            <td class="mono">{ ${setStr(r.added)} }</td>
+            <td>${esc(r.reason)}</td></tr>`).join('')}
+        </tbody></table></div>`;
+}
+
+function renderFirstFollow() {
+    const d = DATA;
+    document.getElementById('first-steps-output').innerHTML = logTable(d.first_log, 'first')
+        + `<div class="mt-2">${d.non_terminals.map(n => `<div class="step-box"><b>FIRST(${esc(n)})</b> = <code>{ ${setStr(d.first_sets[n])} }</code></div>`).join('')}</div>`;
+    document.getElementById('follow-steps-output').innerHTML = logTable(d.follow_log, 'follow')
+        + `<div class="mt-2">${d.non_terminals.map(n => `<div class="step-box" style="border-left-color:#8b5cf6;"><b>FOLLOW(${esc(n)})</b> = <code>{ ${setStr(d.follow_sets[n])} }</code></div>`).join('')}</div>`;
+
+    const symHtml = (list, cls) => list.length ? list.map(x => `<span class="sym ${cls}" title="${esc(x.sources.join('\n'))}">${esc(x.symbol)}</span>`).join('') : '∅';
+    document.getElementById('ff-tbody').innerHTML = d.non_terminals.map(n => `<tr>
+        <td class="fw-bold mono">${esc(n)}</td><td>${symHtml(d.first_contrib[n], '')}</td><td>${symHtml(d.follow_contrib[n], 'fol')}</td></tr>`).join('');
+
+    document.getElementById('contrib-output').innerHTML = `<details class="mt-3"><summary class="fw-semibold small">Productions contributing to each set</summary>
+        ${d.non_terminals.map(n => `<div class="mt-3"><div class="fw-bold mono">${esc(n)}</div>
+            <div class="small"><b>FIRST</b><ul class="mb-1">${d.first_contrib[n].map(x => `<li><code>${esc(x.symbol)}</code> ← ${x.sources.map(ruleHtml).join(' ; ')}</li>`).join('') || '<li>∅</li>'}</ul>
+            <b>FOLLOW</b><ul class="mb-0">${d.follow_contrib[n].map(x => `<li><code>${esc(x.symbol)}</code> ← ${x.sources.map(esc).join(' ; ')}</li>`).join('') || '<li>∅</li>'}</ul></div></div>`).join('')}</details>`;
+}
+
+const cellKey = (n, t) => 'cell-' + DATA.non_terminals.indexOf(n) + '-' + DATA.terminals.indexOf(t);
+
+function renderTable() {
+    const d = DATA, el = document.getElementById('conflict-alert');
+    if (d.conflicts.length) {
+        el.innerHTML = `<div class="alert alert-danger py-2 px-3 small"><b>Not LL(1): ${d.conflicts.length} conflict${d.conflicts.length > 1 ? 's' : ''} found.</b>
+            <ul class="mb-0 mt-1">${d.conflicts.map(c => `<li><span class="pill pill-bad">${esc(c.kind)}</span> M[${esc(c.non_terminal)}, ${esc(c.terminal)}]: <code>${c.productions.map(esc).join('  |  ')}</code><div class="text-sub">${esc(c.why)}</div></li>`).join('')}</ul></div>`;
+    } else {
+        el.innerHTML = `<div class="alert alert-success py-2 px-3 small mb-0"><b>Valid LL(1) grammar:</b> every table cell holds at most one production.</div>`;
+    }
+    const heads = d.terminals.map(t => `<th class="mono">${esc(t)}</th>`).join('');
+    const rows = d.non_terminals.map(n => `<tr><td class="fw-bold mono">${esc(n)}</td>` + d.terminals.map(t => {
+        const cell = (d.ll1_table[n] || {})[t] || [], id = cellKey(n, t);
+        if (cell.length > 1) return `<td id="${id}" class="cell-conflict" title="Conflict">${cell.map(e => ruleHtml(e.rule) + ` <small>(${e.source})</small>`).join('<br>')}</td>`;
+        if (cell.length === 1) return `<td id="${id}" class="cell-fill" title="added via ${cell[0].source}">${ruleHtml(cell[0].rule)}</td>`;
+        return `<td id="${id}" class="cell-empty" title="empty entry = syntax error">-</td>`;
+    }).join('') + '</tr>').join('');
+    document.getElementById('ll1-table').innerHTML = `<thead><tr><th>M[A, a]</th>${heads}</tr></thead><tbody>${rows}</tbody>`;
+}
+
+function renderTrace() {
+    const d = DATA, st = document.getElementById('parse-status');
+    let html = d.parse_success
+        ? `<div class="alert alert-success py-2 px-3 small fw-bold mb-2">String accepted${d.tokens.length ? '' : ' (empty string, derived through ε-productions)'}.</div>`
+        : `<div class="alert alert-danger py-2 px-3 small fw-bold mb-2"><i class="bi bi-x-octagon-fill me-1"></i>${esc(d.error_msg)}</div>`;
+    if (d.token_note) html += `<div class="small text-sub mb-1">${esc(d.token_note)}</div>`;
+    if (d.parse_warnings.length) html += `<div class="alert alert-warning py-2 px-3 small">${d.parse_warnings.map(esc).join('<br>')}</div>`;
+    st.innerHTML = html;
+
+    const toks = d.tokens.concat(['$']), errIdx = d.error ? d.error.index : -1;
+    document.getElementById('token-strip').innerHTML = `<div class="small fw-semibold text-sub mb-1">INPUT TOKENS</div>` + toks.map((t, i) => {
+        const cls = d.parse_success ? 'consumed' : (i < errIdx ? 'consumed' : i === errIdx ? 'err' : '');
+        return `<span class="tok-wrap"><span class="tok ${cls}">${esc(t)}</span><div class="tok-caret">${i === errIdx ? '▲ error' : '&nbsp;'}</div></span>`;
+    }).join('') + (d.tokens.length === 0 ? '<span class="small text-sub ms-2">(empty input, ε)</span>' : '');
+
+    document.getElementById('trace-tbody').innerHTML = d.parse_trace.map((t, i) => `<tr data-step="${t.step}" class="${t.kind === 'error' ? 'err-row' : ''}" onclick="setStep(${t.step}, true, true)">
+        <td class="text-sub">${t.step}</td><td><code>${esc(t.stack)}</code></td><td><code>${esc(t.input)}</code></td><td>${esc(t.action)}</td></tr>`).join('');
+}
+
+/* ------------------------------ parse tree ------------------------------ */
+const radius = d => Math.max(18, 9 + d.data.label.length * 4.6);
+
+function renderTree() {
+    stopPlay();
+    const svg = d3.select('#tree-svg');
+    svg.selectAll('*').remove();
+    const tree = DATA.parse_tree;
+    MAXSTEP = DATA.parse_trace.length;
+    const slider = document.getElementById('step-slider');
+    slider.max = MAXSTEP;
+    if (!tree) return;
+
+    zoomBehavior = d3.zoom().scaleExtent([0.15, 3]).on('zoom', e => gRoot.attr('transform', e.transform));
+    svg.call(zoomBehavior);
+    gRoot = svg.append('g');
+
+    rootH = d3.hierarchy(tree);
+    d3.tree().nodeSize([56, 86]).separation((a, b) => (a.parent === b.parent ? 1 : 1.35))(rootH);
+
+    linkSel = gRoot.append('g').selectAll('path').data(rootH.descendants().slice(1)).join('path')
+        .attr('class', 'link')
+        .attr('d', d => `M${d.x},${d.y}C${d.x},${(d.y + d.parent.y) / 2} ${d.parent.x},${(d.y + d.parent.y) / 2} ${d.parent.x},${d.parent.y}`);
+
+    nodeSel = gRoot.append('g').selectAll('g.node').data(rootH.descendants()).join('g')
+        .attr('transform', d => `translate(${d.x},${d.y})`);
+    nodeSel.append('circle').attr('r', radius);
+    nodeSel.append('text').attr('dy', '.35em').attr('text-anchor', 'middle').text(d => d.data.label);
+    nodeSel.filter(d => d.data.error).append('text').attr('class', 'errlabel').attr('dy', d => radius(d) + 14).attr('text-anchor', 'middle').text('error here');
+
+    setStep(MAXSTEP, false, false);
+    fitTree(false);
+}
+
+function setStep(k, animate = true, userInitiated = false) {
+    if (userInitiated) stopPlay();
+    STEP = Math.max(0, Math.min(MAXSTEP, k));
+    document.getElementById('step-slider').value = STEP;
+
+    if (nodeSel) {
+        const dur = animate ? 380 : 0, final = STEP >= MAXSTEP;
+        nodeSel.attr('class', d => {
+            const c = ['node', d.data.type];
+            if (d.data.matched_step !== undefined && d.data.matched_step <= STEP) c.push('matched');
+            if (d.data.step === STEP && STEP > 0) c.push('fresh');
+            if (d.data.pending && final) c.push('pending');
+            if (d.data.error && final) c.push('errnode');
+            return c.join(' ');
+        });
+        nodeSel.transition().duration(dur).ease(d3.easeCubicOut)
+            .style('opacity', d => d.data.step <= STEP ? 1 : 0)
+            .attr('transform', d => `translate(${d.x},${d.y}) scale(${d.data.step <= STEP ? 1 : 0.2})`);
+        linkSel.transition().duration(dur)
+            .style('opacity', d => d.data.step <= STEP ? 1 : 0);
+        nodeSel.selectAll('.errlabel').style('display', final ? null : 'none');
+    }
+
+    const t = DATA && DATA.parse_trace[STEP - 1];
+    document.getElementById('step-caption').innerHTML = STEP === 0
+        ? `Step 0 / ${MAXSTEP}: only the start symbol exists.`
+        : t ? `Step ${STEP} / ${MAXSTEP}: <b>${esc(t.action)}</b> &nbsp;<span class="text-sub">stack: <code>${esc(t.stack)}</code></span>` : '';
+    document.getElementById('tree-state').textContent = DATA && DATA.parse_success ? '(accepted)' : '(partial tree: error)';
+
+    document.querySelectorAll('#trace-tbody tr').forEach(tr => tr.classList.toggle('cur', +tr.dataset.step === STEP));
+    const cur = document.querySelector('#trace-tbody tr.cur');
+    if (cur && document.getElementById('tab-trace').classList.contains('active')) cur.scrollIntoView({ block: 'nearest' });
+    document.querySelectorAll('#ll1-table td.active-cell').forEach(td => td.classList.remove('active-cell'));
+    if (t && t.cell) { const td = document.getElementById(cellKey(t.cell[0], t.cell[1])); if (td) td.classList.add('active-cell'); }
+}
+
+function stepBy(n) { setStep(STEP + n, true, true); }
+
+function togglePlay() { timer ? stopPlay() : startPlay(); }
+function startPlay() {
+    if (!DATA || !DATA.parse_tree) return;
+    if (STEP >= MAXSTEP) setStep(0, false);
+    document.getElementById('play-btn').innerHTML = '<i class="bi bi-pause-fill"></i> Pause';
+    const tick = () => {
+        if (STEP >= MAXSTEP) { stopPlay(); return; }
+        setStep(STEP + 1, true);
+        timer = setTimeout(tick, +document.getElementById('speed').value);
+    };
+    timer = setTimeout(tick, 250);
+}
+function stopPlay() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const b = document.getElementById('play-btn');
+    if (b) b.innerHTML = '<i class="bi bi-play-fill"></i> Animate';
+}
+
+function fitTree(animate) {
+    if (!rootH || !zoomBehavior) return;
+    const box = document.getElementById('tree-container'), W = box.clientWidth || 800, H = box.clientHeight || 540;
+    const nodes = rootH.descendants();
+    const x0 = d3.min(nodes, d => d.x) - 40, x1 = d3.max(nodes, d => d.x) + 40;
+    const y0 = d3.min(nodes, d => d.y) - 40, y1 = d3.max(nodes, d => d.y) + 50;
+    const k = Math.min(1.2, W / (x1 - x0), H / (y1 - y0));
+    const tf = d3.zoomIdentity.translate(W / 2 - k * (x0 + x1) / 2, H / 2 - k * (y0 + y1) / 2).scale(k);
+    const sel = d3.select('#tree-svg');
+    (animate ? sel.transition().duration(500) : sel).call(zoomBehavior.transform, tf);
+}
+
+document.addEventListener('shown.bs.tab', e => { if (e.target.id === 'tree-tab-btn') fitTree(false); });
+
+/* ------------------------------ practice mode ------------------------------ */
+async function newRound() {
+    const area = document.getElementById('practice-area');
+    area.innerHTML = '<div class="text-sub small">Generating strings…</div>';
+    try {
+        const r = await api('/api/practice', { grammar: document.getElementById('grammar').value, count: +document.getElementById('q-count').value });
+        Object.assign(P, { qs: r.questions, i: 0, score: 0, streak: 0, best: 0, log: [], busy: false, done: false });
+        renderQuestion();
+    } catch (e) { area.innerHTML = `<div class="alert alert-danger small">${esc(e.message)}</div>`; }
+}
+
+function renderQuestion(fb) {
+    const area = document.getElementById('practice-area');
+    if (P.done) return renderSummaryPractice();
+    const q = P.qs[P.i], pct = Math.round(P.i / P.qs.length * 100);
+    const head = `<div class="d-flex justify-content-between small mb-1"><span>Question ${P.i + 1} of ${P.qs.length}</span>
+        <span>Score <b>${P.score}</b> · Streak <b>${P.streak}</b> 🔥</span></div>
+        <div class="progress mb-3" style="height:6px"><div class="progress-bar" style="width:${pct}%"></div></div>`;
+    const warn = DATA && !DATA.is_ll1 ? `<div class="alert alert-warning py-2 small">This grammar is not LL(1). The parser resolves conflicts by taking the first alternative, and that is the verdict used here.</div>` : '';
+    let body = `<div class="small text-sub mb-2 text-center">Will the LL(1) parser <b>accept</b> this string?</div><div class="q-string mb-3">${esc(q.display)}</div>`;
+    if (!fb) {
+        body += `<div class="d-flex gap-3 justify-content-center">
+            <button class="btn btn-success fw-bold px-4" onclick="answer(true)"><i class="bi bi-check-lg me-1"></i>Accept</button>
+            <button class="btn btn-danger fw-bold px-4" onclick="answer(false)"><i class="bi bi-x-lg me-1"></i>Reject</button></div>`;
+    } else {
+        body += `<div class="alert ${fb.correct ? 'alert-success' : 'alert-danger'} mb-3"><b>${fb.correct ? 'Correct!' : 'Not quite.'}</b>
+            The parser <b>${fb.accepted ? 'accepts' : 'rejects'}</b> this string.<div class="small mt-1">${esc(fb.detail)}</div></div>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+            <button class="btn btn-outline-primary btn-sm" onclick="openInStudio()"><i class="bi bi-diagram-3 me-1"></i>See trace &amp; tree</button>
+            <button class="btn btn-primary btn-sm fw-bold" onclick="nextQuestion()">${P.i + 1 >= P.qs.length ? 'Finish' : 'Next'} <i class="bi bi-arrow-right"></i></button></div>`;
+    }
+    area.innerHTML = head + warn + body;
+}
+
+async function answer(pred) {
+    if (P.busy) return;
+    P.busy = true;
+    const q = P.qs[P.i];
+    try {
+        const fb = await api('/api/practice/check', { grammar: document.getElementById('grammar').value, test_string: q.test_string, prediction: pred });
+        fb.predicted = pred;
+        if (fb.correct) { P.score++; P.streak++; P.best = Math.max(P.best, P.streak); } else P.streak = 0;
+        P.log.push({ q, fb });
+        P.busy = false;
+        renderQuestion(fb);
+    } catch (e) { P.busy = false; document.getElementById('practice-area').insertAdjacentHTML('beforeend', `<div class="alert alert-danger small mt-2">${esc(e.message)}</div>`); }
+}
+
+function nextQuestion() { P.i++; if (P.i >= P.qs.length) P.done = true; renderQuestion(); }
+
+function openInStudio() {
+    const q = P.qs[P.i];
+    document.getElementById('test_string').value = q.test_string;
+    processGrammar().then(() => bootstrap.Tab.getOrCreateInstance(document.getElementById('trace-tab-btn')).show());
+}
+
+function renderSummaryPractice() {
+    const n = P.qs.length, pct = Math.round(P.score / n * 100);
+    const msg = pct === 100 ? 'Perfect! You can predict this parser.' : pct >= 70 ? 'Nice work. Review the misses below.' : 'Keep practising: compare each miss with the FIRST/FOLLOW sets and the table.';
+    document.getElementById('practice-area').innerHTML = `<div class="text-center mb-3"><div class="display-5 fw-bold">${P.score} / ${n}</div>
+        <div class="text-sub">${pct}% correct · best streak ${P.best}</div><div class="mt-1">${msg}</div></div>
+        <table class="table table-sm align-middle"><thead><tr><th>String</th><th>You said</th><th>Parser</th><th></th></tr></thead><tbody>
+        ${P.log.map(l => `<tr><td class="mono">${esc(l.q.display)}</td><td>${l.fb.predicted ? 'accept' : 'reject'}</td><td>${l.fb.accepted ? 'accept' : 'reject'}</td>
+        <td>${l.fb.correct ? '<span class="pill pill-ok">✓</span>' : '<span class="pill pill-bad">✗</span>'}</td></tr>`).join('')}</tbody></table>
+        <div class="text-center"><button class="btn btn-primary fw-bold" onclick="newRound()"><i class="bi bi-shuffle me-1"></i>New round</button></div>`;
+}
+
+document.getElementById('practice-area').innerHTML = '<div class="text-center py-4"><button class="btn btn-primary fw-bold" onclick="newRound()"><i class="bi bi-play-fill me-1"></i>Start practice round</button></div>';
+window.onload = processGrammar;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+{% endraw %}
