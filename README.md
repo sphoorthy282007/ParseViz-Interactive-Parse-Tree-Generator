@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌳 ParseViz
+# 🌳 ParseViz - Interactive Parse Tree Generator
 
 ### The interactive LL(1) parsing studio: *watch* top-down parsing instead of memorising it.
 
